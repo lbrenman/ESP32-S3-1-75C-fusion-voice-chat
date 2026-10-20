@@ -2,7 +2,7 @@
 
 Touch and hold the round screen, talk, let go. The board records your voice, sends it to your
 WebSocket voice server, shows what the server heard and its reply, and plays the reply audio
-through the speaker.
+through the speaker. A sample WebSocket voice server built on Amplfy Fusion and Mistral is available [here](https://github.com/lbrenman/Amplify-Fusion-AI-Voice-Chat-Demo-Using-Mistral).
 
 ```
  hold screen ──► record 16 kHz mono ──► one binary WS frame (WAV) ──► your server

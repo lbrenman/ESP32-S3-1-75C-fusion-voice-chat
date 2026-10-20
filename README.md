@@ -19,6 +19,13 @@ work on this board.
 > clock pin (MCLK on GPIO16 instead of GPIO42). Code for the 1.75 reads silence from the 1.75C's
 > microphones. This project only targets the **1.75C**.
 
+## Screen Shots
+
+![image](images/IMG_0330.png)
+![image](images/IMG_0331.png)
+![image](images/IMG_0333.png)
+![image](images/IMG_0334.png)
+
 ---
 
 ## What's in this folder

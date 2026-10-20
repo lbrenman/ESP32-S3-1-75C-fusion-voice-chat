@@ -1,4 +1,4 @@
-# ESP32-S3-1-75C-fusion-voice_chat — Push-to-Talk Voice Client Application for the ESP32-S3-Touch-AMOLED-1.75C
+# ESP32-S3-1-75C-fusion-voice-chat — Push-to-Talk Voice Client Application for the ESP32-S3-Touch-AMOLED-1.75C
 
 Touch and hold the round screen, talk, let go. The board records your voice, sends it to your
 WebSocket voice server, shows what the server heard and its reply, and plays the reply audio
@@ -62,10 +62,10 @@ ESP-IDF does not support paths with spaces, so keep the project out of Dropbox (
 `~/esp/projects`).
 
 ```bash
-# 1. Get the project (git clone, or unzip the release zip)
+# 1. Get the project
 cd ~/esp/projects
-git clone https://github.com/lbrenman/ESP32-S3-1-75C-fusion-voice-chat.git   # or: unzip voice_chat_complete.zip
-cd voice_chat
+git clone https://github.com/lbrenman/ESP32-S3-1-75C-fusion-voice-chat.git
+cd ESP32-S3-1-75C-fusion-voice-chat
 
 # 2. Your settings: Wi-Fi + server URL + API key
 cp main/secrets.h.example main/secrets.h

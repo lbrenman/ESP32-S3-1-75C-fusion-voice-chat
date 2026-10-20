@@ -97,15 +97,23 @@ with the build output.
 
 ## Using it
 
-**On/off:** the app starts **off** ("Paused", gray ring), so touching the screen does nothing.
-Tap the **power button** at the bottom to switch it on (the button and ring turn green), and tap it
-again to switch it off. It also switches itself off after 2 minutes without use (`AUTO_OFF_MS`).
-If you switch it off while it's thinking or speaking, the reply finishes first.
+**On/off:** the app starts **off** ("Swipe up to start", gray ring), so touching the screen does
+nothing.
+
+- **Swipe up** anywhere on the screen to switch it on: the ring and the power icon turn green.
+- **Swipe down** to switch it off.
+- Tapping the power icon at the bottom also toggles it.
+- It switches itself off after 2 minutes without use (`AUTO_OFF_MS`).
+- If you switch it off while it's thinking or speaking, the reply finishes first.
+
+Swipes and hold-to-talk share the screen. Recording starts the moment your finger lands, so your
+first word isn't cut off. If the finger then moves at least 60 px up or down within 0.8 s, the
+touch was a swipe, and the recording is discarded instead of sent.
 
 | Ring color | Status text | Meaning |
 | --- | --- | --- |
 | Amber | Connecting to Wi-Fi... / server... | Starting up or reconnecting |
-| Gray | Paused | Switched off: tap the power button to use it |
+| Gray | Swipe up to start | Switched off: swipe up (or tap the power icon) to use it |
 | **Green** | **Hold to talk** | Ready: touch and hold anywhere, then speak |
 | Red | Listening... | Recording (up to 10 s); release to send |
 | Blue | Thinking... | Waiting for the server: three colored dots bounce in a wave until the reply arrives |
@@ -180,6 +188,7 @@ the file stay valid.
 | `RX_MAX_BYTES` | 3 MB | Largest single message accepted from the server |
 | `REPLY_BIG_FONT_CHARS` | 90 | Replies longer than this use the 16 px font |
 | `AUTO_OFF_MS` | 2 min | Switch off after this long idle; `0` = never |
+| `SWIPE_MIN_PX`, `SWIPE_MAX_MS` | 60 px, 800 ms | How far and how soon the finger must move for a swipe; raise `SWIPE_MIN_PX` if holds get mistaken for swipes |
 | `DOT_PERIOD_MS`, `DOT_BOUNCE`, `DOT_STAGGER` | 1000 ms, 22 px, 140 ms | Speed, height and spacing of the thinking animation; dot colors are in `dots_build()` |
 
 ## Troubleshooting

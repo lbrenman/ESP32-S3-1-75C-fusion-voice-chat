@@ -69,6 +69,8 @@ extern const char server_ca_pem_start[] asm("_binary_server_ca_pem_start");
 #define REPLY_MAX_CHARS     320             // what fits on the round screen
 #define REPLY_BIG_FONT_CHARS 90             // longer replies switch to the 16 px font
 #define AUTO_OFF_MS         (2 * 60 * 1000) // switch off after this long idle; 0 = never
+#define SWIPE_MIN_PX        60              // vertical travel that counts as a swipe
+#define SWIPE_MAX_MS        800             // a swipe must happen this soon after touching
 
 #ifndef WS_PORT
 #define WS_PORT 443
@@ -86,6 +88,7 @@ typedef struct {
 
 static volatile app_state_t s_state = ST_BOOT;
 static volatile bool s_recording = false;
+static volatile bool s_rec_cancel = false;     // set by a swipe: discard the recording
 static volatile bool s_ws_connected = false;
 static volatile bool s_got_text = false;
 static volatile bool s_enabled = false;          // on/off toggle; starts off
@@ -232,7 +235,7 @@ static void ui_state_apply(app_state_t st)
     case ST_BOOT:       text = "Starting...";            color = 0x444444; break;
     case ST_WIFI:       text = "Connecting to Wi-Fi...";  color = 0xF5A623; break;
     case ST_CONNECTING: text = "Connecting to server..."; color = 0xF5A623; break;
-    case ST_OFF:        text = "Paused";                 color = 0x444444; break;
+    case ST_OFF:        text = "Swipe up to start";      color = 0x444444; break;
     case ST_READY:      text = "Hold to talk";           color = 0x2ECC71; break;
     case ST_LISTENING:  text = "Listening...";           color = 0xE74C3C; break;
     case ST_THINKING:   text = "Thinking...";            color = 0x3498DB; break;
@@ -257,36 +260,70 @@ static void ui_state(app_state_t st)
     bsp_display_unlock();
 }
 
-/* Power button tap (runs in the LVGL task, so no display locking here). */
-static void power_event_cb(lv_event_t *e)
+/* Switch the app on or off (runs in the LVGL task, so no display locking here). */
+static void set_enabled(bool on)
 {
-    if (lv_event_get_code(e) != LV_EVENT_CLICKED || s_recording) return;
+    if (s_enabled == on) return;
+    s_enabled = on;
+    ESP_LOGI(TAG, "Switched %s", on ? "on" : "off");
 
-    s_enabled = !s_enabled;
-    ESP_LOGI(TAG, "Switched %s", s_enabled ? "on" : "off");
-
-    if (s_enabled && s_state == ST_OFF) {
+    if (on && s_state == ST_OFF) {
         ui_state_apply(s_ws_connected ? ST_READY : ST_CONNECTING);
-    } else if (!s_enabled && s_state == ST_READY) {
+    } else if (!on && s_state == ST_READY) {
         ui_state_apply(ST_OFF);
     } else {
-        /* mid-turn (thinking/speaking) or still connecting: just update the button;
+        /* mid-turn (listening/thinking/speaking) or still connecting: just update the button;
          * the state switches to paused/ready when the turn finishes */
         ui_state_apply(s_state);
     }
 }
 
-/* Runs in the LVGL task: only set flags here, no display locking. */
+/* Power button tap: toggles on/off. */
+static void power_event_cb(lv_event_t *e)
+{
+    if (lv_event_get_code(e) != LV_EVENT_CLICKED || s_recording) return;
+    set_enabled(!s_enabled);
+}
+
+/* Full-screen touch area (runs in the LVGL task: only set flags here, no display locking).
+ *   touch and hold      -> record while held (only when on)
+ *   swipe up / down     -> switch on / off; a recording the touch started is discarded
+ * Recording starts the moment the finger lands, so the first word isn't lost; if the finger
+ * then moves SWIPE_MIN_PX vertically within SWIPE_MAX_MS, it was a swipe, not talking. */
+static lv_point_t s_touch_start;
+static int64_t    s_touch_start_us;
+static bool       s_swiped;
+
 static void touch_event_cb(lv_event_t *e)
 {
     lv_event_code_t code = lv_event_get_code(e);
+    lv_indev_t *indev = lv_indev_active();
 
     if (code == LV_EVENT_PRESSED) {
+        if (indev) lv_indev_get_point(indev, &s_touch_start);
+        s_touch_start_us = esp_timer_get_time();
+        s_swiped = false;
         if (s_state == ST_READY && s_ws_connected && !s_recording) {
-            s_last_activity_us = esp_timer_get_time();
+            s_last_activity_us = s_touch_start_us;
+            s_rec_cancel = false;
             s_recording = true;
             xTaskNotifyGive(s_rec_task);
         }
+    } else if (code == LV_EVENT_PRESSING) {
+        if (s_swiped || !indev) return;
+        if (esp_timer_get_time() - s_touch_start_us > (int64_t)SWIPE_MAX_MS * 1000) return;
+        lv_point_t p;
+        lv_indev_get_point(indev, &p);
+        int dx = p.x - s_touch_start.x;
+        int dy = p.y - s_touch_start.y;
+        if (LV_ABS(dy) < SWIPE_MIN_PX || LV_ABS(dy) < 2 * LV_ABS(dx)) return;
+
+        s_swiped = true;
+        if (s_recording) {            // the touch started a recording: throw it away
+            s_rec_cancel = true;
+            s_recording = false;
+        }
+        set_enabled(dy < 0);          // screen y grows downward: negative = swipe up
     } else if (code == LV_EVENT_RELEASED || code == LV_EVENT_PRESS_LOST) {
         s_recording = false;
     }
@@ -354,9 +391,11 @@ static void ui_build(void)
     lv_obj_set_size(touch, LV_PCT(100), LV_PCT(100));
     lv_obj_center(touch);
     lv_obj_add_flag(touch, LV_OBJ_FLAG_CLICKABLE);
+    lv_obj_remove_flag(touch, LV_OBJ_FLAG_SCROLLABLE);
+    lv_obj_remove_flag(touch, LV_OBJ_FLAG_GESTURE_BUBBLE);
     lv_obj_add_event_cb(touch, touch_event_cb, LV_EVENT_ALL, NULL);
 
-    /* power toggle: created last so it sits above the touch area and gets its own taps */
+    /* power indicator, also tappable: created last so it sits above the touch area */
     s_btn_power = lv_obj_create(scr);
     lv_obj_remove_style_all(s_btn_power);
     lv_obj_set_size(s_btn_power, 60, 60);
@@ -771,6 +810,12 @@ static void rec_task(void *arg)
         s_recording = false;
 
         uint32_t ms = (uint32_t)(n * 1000 / REC_RATE);
+        if (s_rec_cancel) {           // the touch was a swipe, not talking
+            s_rec_cancel = false;
+            ESP_LOGI(TAG, "Swipe: discarded %u ms of audio", (unsigned)ms);
+            ui_state(ST_READY);       // shows as paused if the swipe switched the app off
+            continue;
+        }
         ESP_LOGI(TAG, "Recorded %u ms", (unsigned)ms);
 
         if (ms < REC_MIN_MS) {
